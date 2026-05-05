@@ -1,0 +1,11 @@
+services:
+  - type: worker
+    name: funpay-cardinal
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: FPC_IS_RUNNING_ON_RENDER
+        value: "1"
