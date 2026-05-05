@@ -169,8 +169,52 @@ def setup_telegram_proxy():
     time.sleep(5)
 
 
+# ========== ДОБАВИТЬ ЭТУ ФУНКЦИЮ ==========
+def auto_setup_from_env(config):
+    """Автоматически заполняет конфиг из переменных окружения для Render.com"""
+    # Проверяем, запущены ли мы на Render
+    if not os.environ.get('RENDER') and not os.environ.get('FPC_IS_RUNNING_ON_RENDER'):
+        return False
+    
+    golden_key = os.environ.get('FUNPAY_GOLDEN_KEY', '')
+    telegram_token = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+    
+    if golden_key and len(golden_key) == 32:
+        config.set("FunPay", "golden_key", golden_key)
+        print(f"{Fore.GREEN}✓ Golden key загружен из переменных окружения{Style.RESET_ALL}")
+    else:
+        if golden_key:
+            print(f"{Fore.RED}✗ Golden key имеет неверную длину (нужно 32 символа){Style.RESET_ALL}")
+        return False
+    
+    if telegram_token:
+        config.set("Telegram", "token", telegram_token)
+        config.set("Telegram", "enabled", "1")
+        # Генерируем заглушку для пароля (потом можно сменить через бота)
+        config.set("Telegram", "secretKeyHash", hash_password("change_me_later"))
+        print(f"{Fore.GREEN}✓ Telegram токен загружен из переменных окружения{Style.RESET_ALL}")
+    else:
+        print(f"{Fore.RED}✗ Telegram токен не найден в переменных окружения{Style.RESET_ALL}")
+        return False
+    
+    return True
+# ==========================================
+
+
 def first_setup():
     config = create_config_obj(default_config)
+    
+    # ========== ДОБАВИТЬ ЭТОТ БЛОК ==========
+    # Автоматическая настройка для Render
+    if auto_setup_from_env(config):
+        print(f"\n{Fore.CYAN}Автоматическая настройка завершена. Сохраняю конфиг...{Style.RESET_ALL}")
+        os.makedirs("configs", exist_ok=True)
+        with open("configs/_main.cfg", "w", encoding="utf-8") as f:
+            config.write(f)
+        print(f"{Fore.GREEN}Конфиг сохранен! Запускаю бота...{Style.RESET_ALL}")
+        return
+    # ==========================================
+    
     sleep_time = 1
 
     print(f"{Fore.CYAN}{Style.BRIGHT}Привет! {Fore.RED}(`-`)/{Style.RESET_ALL}")
