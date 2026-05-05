@@ -1,0 +1,21 @@
+app = "funpay-cardinal"  # твое имя приложения
+
+[build]
+  # Не надо, у нас уже есть requirements.txt
+
+[env]
+  FUNPAY_GOLDEN_KEY = "твой_32_символа_ключ"
+  TELEGRAM_BOT_TOKEN = "твой_токен_бота"
+  FPC_IS_RUNNING_ON_RENDER = "1"
+
+[[services]]
+  internal_port = 8080
+  protocol = "tcp"
+  
+  [[services.ports]]
+    port = 8080
+    
+  [[services.tcp_checks]]
+    interval = 10000
+    timeout = 2000
+    restart_limit = 0
