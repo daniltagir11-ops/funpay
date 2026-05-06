@@ -92,13 +92,16 @@ default_config = {
 
 
 def create_configs():
+    """Создает пустые файлы конфигов если их нет"""
+    os.makedirs("configs", exist_ok=True)
+    
     if not os.path.exists("configs/auto_response.cfg"):
         with open("configs/auto_response.cfg", "w", encoding="utf-8"):
-            ...
+            pass
 
     if not os.path.exists("configs/auto_delivery.cfg"):
         with open("configs/auto_delivery.cfg", "w", encoding="utf-8"):
-            ...
+            pass
 
 
 def create_config_obj(settings) -> ConfigParser:
@@ -115,204 +118,165 @@ def create_config_obj(settings) -> ConfigParser:
     return config
 
 
-def contains_russian(text: str) -> bool:
-    for char in text:
-        if 'А' <= char <= 'я' or char in 'Ёё':
-            return True
-    return False
-
-def input_proxy(set_telebot_proxy: bool = False) -> str | None:
-    while True:
-        proxy_input = input(f"{Fore.MAGENTA}{Style.BRIGHT}└───> {Style.RESET_ALL}").strip()
-
-        if not proxy_input:
-            if set_telebot_proxy:
-                telebot.apihelper.proxy = None
-            return None
-
-        try:
-            scheme, login, password, ip, port = validate_proxy(proxy_input)
-            proxy = build_proxy(scheme, login, password, ip, port)
-
-            if not check_proxy({"http": proxy, "https": proxy}):
-                print("\nНевалидные прокси. Попробуй еще раз!")
-                continue
-
-            if set_telebot_proxy:
-                telebot.apihelper.proxy = {"http": proxy, "https": proxy}
-
-            return proxy
-
-        except Exception as ex:
-            print(f"\nНеверный формат прокси: {ex}. Попробуй еще раз!")
-
 def setup_telegram_proxy():
+    """Настройка прокси для Telegram (автоматическая версия)"""
     config = load_main_config("configs/_main.cfg")
-    print(
-        f"\n{Fore.MAGENTA}{Style.BRIGHT}┌── {Fore.CYAN}" f"Если хочешь использовать IPv4 прокси ДЛЯ ДОСТУПА К TELEGRAM"
-        f" – укажи их в формате scheme://login:password@ip:port, login:password@ip:port или ip:port."
-        f" Если ты не знаешь, " f"что это такое или они тебе не нужны - просто нажми Enter. "
-        f"{Fore.RED}(* ^ ω ^){Style.RESET_ALL}")
-    while True:
+    
+    # Проверяем прокси из переменных окружения
+    telegram_proxy = os.environ.get('TELEGRAM_PROXY', '')
+    
+    if telegram_proxy:
         try:
-            proxy = input_proxy(set_telebot_proxy=True)
-            username = telebot.TeleBot(config["Telegram"]["token"]).get_me().username
-            print(f"\n\n{Fore.CYAN}Подключение к Telegram успешно: @{username}...{Style.RESET_ALL}")
-            break
+            scheme, login, password, ip, port = validate_proxy(telegram_proxy)
+            proxy = build_proxy(scheme, login, password, ip, port)
+            
+            if check_proxy({"http": proxy, "https": proxy}):
+                telebot.apihelper.proxy = {"http": proxy, "https": proxy}
+                config.set("Telegram", "proxy", proxy)
+                print(f"{Fore.GREEN}✓ Прокси для Telegram настроен{Style.RESET_ALL}")
         except Exception as ex:
-            print(f"\n\n{Fore.CYAN}Не удалось добавить прокси: {ex}...{Style.RESET_ALL}")
-
-    config.set("Telegram", "proxy", proxy or "")
+            print(f"{Fore.RED}✗ Ошибка настройки прокси: {ex}{Style.RESET_ALL}")
+    
     print(f"{Fore.CYAN}Сохраняю конфиг...{Style.RESET_ALL}")
     with open("configs/_main.cfg", "w", encoding="utf-8") as f:
         config.write(f)
-    time.sleep(5)
-
-
-# ========== ДОБАВИТЬ ЭТУ ФУНКЦИЮ ==========
-def auto_setup_from_env(config):
-    """Автоматически заполняет конфиг из переменных окружения для Render.com"""
-    # Проверяем, запущены ли мы на Render
-    if not os.environ.get('RENDER') and not os.environ.get('FPC_IS_RUNNING_ON_RENDER'):
-        return False
-    
-    golden_key = os.environ.get('FUNPAY_GOLDEN_KEY', '')
-    telegram_token = os.environ.get('TELEGRAM_BOT_TOKEN', '')
-    
-    if golden_key and len(golden_key) == 32:
-        config.set("FunPay", "golden_key", golden_key)
-        print(f"{Fore.GREEN}✓ Golden key загружен из переменных окружения{Style.RESET_ALL}")
-    else:
-        if golden_key:
-            print(f"{Fore.RED}✗ Golden key имеет неверную длину (нужно 32 символа){Style.RESET_ALL}")
-        return False
-    
-    if telegram_token:
-        config.set("Telegram", "token", telegram_token)
-        config.set("Telegram", "enabled", "1")
-        # Генерируем заглушку для пароля (потом можно сменить через бота)
-        config.set("Telegram", "secretKeyHash", hash_password("change_me_later"))
-        print(f"{Fore.GREEN}✓ Telegram токен загружен из переменных окружения{Style.RESET_ALL}")
-    else:
-        print(f"{Fore.RED}✗ Telegram токен не найден в переменных окружения{Style.RESET_ALL}")
-        return False
-    
-    return True
-# ==========================================
+    time.sleep(2)
 
 
 def first_setup():
+    """Полностью автоматическая первичная настройка без ввода с терминала"""
+    
+    # Создаем необходимые директории и файлы
+    os.makedirs("configs", exist_ok=True)
+    os.makedirs("storage/cache", exist_ok=True)
+    os.makedirs("storage/plugins", exist_ok=True)
+    os.makedirs("storage/products", exist_ok=True)
+    os.makedirs("plugins", exist_ok=True)
+    
+    create_configs()
+    
+    print(f"{Fore.CYAN}{Style.BRIGHT}Автоматическая настройка FunPay Cardinal...{Style.RESET_ALL}")
+    time.sleep(1)
+    
+    # Создаем объект конфига
     config = create_config_obj(default_config)
     
-    # ========== ДОБАВИТЬ ЭТОТ БЛОК ==========
-    # Автоматическая настройка для Render
-    if auto_setup_from_env(config):
-        print(f"\n{Fore.CYAN}Автоматическая настройка завершена. Сохраняю конфиг...{Style.RESET_ALL}")
-        os.makedirs("configs", exist_ok=True)
-        with open("configs/_main.cfg", "w", encoding="utf-8") as f:
-            config.write(f)
-        print(f"{Fore.GREEN}Конфиг сохранен! Запускаю бота...{Style.RESET_ALL}")
-        return
-    # ==========================================
-    
-    sleep_time = 1
-
-    print(f"{Fore.CYAN}{Style.BRIGHT}Привет! {Fore.RED}(`-`)/{Style.RESET_ALL}")
-    time.sleep(sleep_time)
-
-    print(f"\n{Fore.CYAN}{Style.BRIGHT}Не могу найти основной конфиг... {Fore.RED}(-_-;). . .{Style.RESET_ALL}")
-    time.sleep(sleep_time)
-
-    print(f"\n{Fore.CYAN}{Style.BRIGHT}Давай ка проведем первичную настройку! {Fore.RED}°++°{Style.RESET_ALL}")
-    time.sleep(sleep_time)
-
-    while True:
-        print(f"\n{Fore.MAGENTA}{Style.BRIGHT}┌── {Fore.CYAN}"
-              f"Для начала введи токен (golden_key) твоего FunPay аккаунта (посмотреть его можно в расширении EditThisCookie) {Fore.RED}(._.){Style.RESET_ALL}")
-        golden_key = input(f"{Fore.MAGENTA}{Style.BRIGHT}└───> {Style.RESET_ALL}").strip()
-        if len(golden_key) != 32:
-            print(
-                f"\n{Fore.CYAN}{Style.BRIGHT}Неверный формат токена. Попробуй еще раз! {Fore.RED}\(!!˚0˚)/{Style.RESET_ALL}")
-            continue
+    # ========== 1. Golden Key ==========
+    golden_key = "kz1tpm50rgjatt52zxc5h43df91x0zk0"
+    if len(golden_key) != 32:
+        print(f"{Fore.RED}✗ Ошибка: Golden Key имеет неверную длину (нужно 32 символа){Style.RESET_ALL}")
+        print(f"{Fore.RED}Получено: {len(golden_key)} символов{Style.RESET_ALL}")
+        return False
+    else:
         config.set("FunPay", "golden_key", golden_key)
-        break
-
-    while True:
-        print(f"\n{Fore.MAGENTA}{Style.BRIGHT}┌── {Fore.CYAN}"
-              f"Если хочешь, ты можешь указать свой User-agent (введи в Google \"my user agent\"). Или можешь просто нажать Enter. "
-              f"{Fore.RED}¯\(°_o)/¯{Style.RESET_ALL}")
-        user_agent = input(f"{Fore.MAGENTA}{Style.BRIGHT}└───> {Style.RESET_ALL}").strip()
-        if contains_russian(user_agent):
-            print(
-                f"\n{Fore.CYAN}{Style.BRIGHT}Ты не знаешь, что такое Google? {Fore.RED}\(!!˚0˚)/{Style.RESET_ALL}")
-            continue
-        if user_agent:
-            config.set("FunPay", "user_agent", user_agent)
-        break
-
-    print(f"\n{Fore.MAGENTA}{Style.BRIGHT}┌── {Fore.CYAN}" f"Если хочешь использовать IPv4 прокси ДЛЯ ДОСТУПА К TELEGRAM"
-          f" – укажи их в формате scheme://login:password@ip:port, login:password@ip:port или ip:port."
-          f" Если ты не знаешь, " f"что это такое или они тебе не нужны - просто нажми Enter. " 
-          f"{Fore.RED}(* ^ ω ^){Style.RESET_ALL}")
-    proxy = input_proxy(set_telebot_proxy=True)
-
-    if proxy:
-        config.set("Telegram", "proxy", proxy)
-
-
-    while True:
-        print(
-            f"\n{Fore.MAGENTA}{Style.BRIGHT}┌── {Fore.CYAN}Введи API-токен Telegram-бота (получить его можно у @BotFather). "
-            f"@username бота должен начинаться с \"funpay\". {Fore.RED}(._.){Style.RESET_ALL}")
-        token = input(f"{Fore.MAGENTA}{Style.BRIGHT}└───> {Style.RESET_ALL}").strip()
+        print(f"{Fore.GREEN}✓ Golden Key установлен{Style.RESET_ALL}")
+    
+    # ========== 2. User-Agent (оставляем стандартный) ==========
+    # Используем стандартный User-Agent из default_config
+    print(f"{Fore.GREEN}✓ Использую стандартный User-Agent{Style.RESET_ALL}")
+    
+    # ========== 3. Telegram прокси (опционально) ==========
+    telegram_proxy = os.environ.get('TELEGRAM_PROXY', '')
+    if telegram_proxy:
         try:
-            if not token or not token.split(":")[0].isdigit():
-                raise Exception("Неправильный формат токена")
-            username = telebot.TeleBot(token).get_me().username
-            if not username.lower().startswith("funpay"):
-                print(
-                    f"\n{Fore.CYAN}{Style.BRIGHT}@username бота должен начинаться с \"funpay\"! {Fore.RED}\(!!˚0˚)/{Style.RESET_ALL}")
-                continue
+            scheme, login, password, ip, port = validate_proxy(telegram_proxy)
+            proxy = build_proxy(scheme, login, password, ip, port)
+            if check_proxy({"http": proxy, "https": proxy}):
+                config.set("Telegram", "proxy", proxy)
+                print(f"{Fore.GREEN}✓ Telegram прокси настроен{Style.RESET_ALL}")
         except Exception as ex:
-            s = ""
-            if str(ex):
-                s = f" ({str(ex)})"
-            print(f"\n{Fore.CYAN}{Style.BRIGHT}Попробуй еще раз!{s} {Fore.RED}\(!!˚0˚)/{Style.RESET_ALL}")
-            continue
-        break
-
-    while True:
-        print(
-            f"\n{Fore.MAGENTA}{Style.BRIGHT}┌── {Fore.CYAN}Придумай пароль (его потребует Telegram-бот). Пароль должен содержать более 8 символов, заглавные, строчные буквы и хотя бы одну цифру "
-            f" {Fore.RED}ᴖ̮ ̮ᴖ{Style.RESET_ALL}")
-        password = input(f"{Fore.MAGENTA}{Style.BRIGHT}└───> {Style.RESET_ALL}").strip()
-        if len(password) < 8 or password.lower() == password or password.upper() == password or not any(
-                [i.isdigit() for i in password]):
-            print(
-                f"\n{Fore.CYAN}{Style.BRIGHT}Это плохой пароль. Попробуй еще раз! {Fore.RED}\(!!˚0˚)/{Style.RESET_ALL}")
-            continue
-        break
-
-    config.set("Telegram", "enabled", "1")
-    config.set("Telegram", "token", token)
+            print(f"{Fore.YELLOW}⚠ Предупреждение: не удалось настроить прокси: {ex}{Style.RESET_ALL}")
+    else:
+        print(f"{Fore.GREEN}✓ Прокси для Telegram не требуется{Style.RESET_ALL}")
+    
+    # ========== 4. Telegram Bot Token ==========
+    token = "8704132106:AAEujgCsNca1X38bmxRGguVQ4ft4I5ECYgE"
+    try:
+        if not token or not token.split(":")[0].isdigit():
+            raise Exception("Неправильный формат токена")
+        
+        # Проверяем токен (с таймаутом)
+        bot = telebot.TeleBot(token)
+        bot.get_me()
+        username = bot.get_me().username
+        
+        if not username.lower().startswith("funpay"):
+            print(f"{Fore.YELLOW}⚠ Предупреждение: username бота не начинается с 'funpay' (@{username}){Style.RESET_ALL}")
+        
+        config.set("Telegram", "token", token)
+        config.set("Telegram", "enabled", "1")
+        print(f"{Fore.GREEN}✓ Telegram токен установлен (бот: @{username}){Style.RESET_ALL}")
+    except Exception as ex:
+        print(f"{Fore.RED}✗ Ошибка при проверке токена бота: {ex}{Style.RESET_ALL}")
+        return False
+    
+    # ========== 5. Пароль для входа ==========
+    # Генерируем случайный пароль если не указан в окружении
+    import random
+    import string
+    
+    password = os.environ.get('BOT_PASSWORD', '')
+    if not password:
+        # Генерируем случайный пароль
+        chars = string.ascii_letters + string.digits
+        password = ''.join(random.choice(chars) for _ in range(12))
+        print(f"{Fore.YELLOW}⚠ Сгенерирован случайный пароль: {password}{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}⚠ Сохраните его! Пароль можно будет сменить в боте командой /settings{Style.RESET_ALL}")
+    
+    if len(password) < 8:
+        print(f"{Fore.YELLOW}⚠ Пароль слишком короткий, дополняю...{Style.RESET_ALL}")
+        password = password + ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8 - len(password)))
+    
     config.set("Telegram", "secretKeyHash", hash_password(password))
-
-    print(
-        f"\n{Fore.MAGENTA}{Style.BRIGHT}┌── {Fore.CYAN}" f"Если хочешь использовать IPv4 прокси ДЛЯ ДОСТУПА К FUNPAY"
-        f" – укажи их в формате scheme://login:password@ip:port, login:password@ip:port или ip:port."
-        f" Если ты не знаешь, " f"что это такое или они тебе не нужны - просто нажми Enter. "
-        f"{Fore.RED}(* ^ ω ^){Style.RESET_ALL}")
-    proxy = input_proxy(set_telebot_proxy=True)
-
-    if proxy:
-        config.set("Proxy", "proxy", proxy)
-        config.set("Proxy", "enable", "1")
-        config.set("Proxy", "check", "1")
-
-    print(f"\n{Fore.CYAN}{Style.BRIGHT}Готово! Сейчас я сохраню конфиг и завершу программу! "
-          f"{Fore.RED}ʘ>ʘ{Style.RESET_ALL}")
-    print(f"{Fore.CYAN}{Style.BRIGHT}Запусти меня снова и напиши своему Telegram-боту. "
-          f"Все остальное ты сможешь настроить через него. {Fore.RED}ʕ•ᴥ•ʔ{Style.RESET_ALL}")
+    print(f"{Fore.GREEN}✓ Пароль для входа установлен{Style.RESET_ALL}")
+    
+    # ========== 6. FunPay прокси (опционально) ==========
+    funpay_proxy = os.environ.get('FUNPAY_PROXY', '')
+    if funpay_proxy:
+        try:
+            scheme, login, password, ip, port = validate_proxy(funpay_proxy)
+            proxy = build_proxy(scheme, login, password, ip, port)
+            if check_proxy({"http": proxy, "https": proxy}):
+                config.set("Proxy", "proxy", proxy)
+                config.set("Proxy", "enable", "1")
+                config.set("Proxy", "check", "1")
+                print(f"{Fore.GREEN}✓ FunPay прокси настроен{Style.RESET_ALL}")
+        except Exception as ex:
+            print(f"{Fore.YELLOW}⚠ Предупреждение: не удалось настроить FunPay прокси: {ex}{Style.RESET_ALL}")
+    else:
+        print(f"{Fore.GREEN}✓ Прокси для FunPay не требуется{Style.RESET_ALL}")
+    
+    # ========== 7. Сохраняем конфиг ==========
+    print(f"\n{Fore.CYAN}{Style.BRIGHT}Сохраняю конфигурацию...{Style.RESET_ALL}")
+    
     with open("configs/_main.cfg", "w", encoding="utf-8") as f:
         config.write(f)
-    time.sleep(10)
+    
+    # Создаем файл с паролем для информации (опционально)
+    password_file = "storage/password.txt"
+    with open(password_file, "w", encoding="utf-8") as f:
+        f.write(f"Пароль для входа в Telegram бота: {password}\n")
+        f.write("Вы можете изменить его в боте командой /settings\n")
+    
+    print(f"{Fore.GREEN}✓ Конфигурация сохранена{Style.RESET_ALL}")
+    print(f"{Fore.GREEN}✓ Пароль сохранен в {password_file}{Style.RESET_ALL}")
+    
+    print(f"\n{Fore.CYAN}{Style.BRIGHT}========================================{Style.RESET_ALL}")
+    print(f"{Fore.GREEN}{Style.BRIGHT}Автоматическая настройка завершена успешно!{Style.RESET_ALL}")
+    print(f"{Fore.CYAN}{Style.BRIGHT}========================================{Style.RESET_ALL}")
+    print(f"\n{Fore.YELLOW}Запущенные параметры:{Style.RESET_ALL}")
+    print(f"  • Golden Key: {golden_key[:8]}...{golden_key[-8:]}")
+    print(f"  • Telegram Bot: @{username if 'username' in dir() else 'unknown'}")
+    print(f"  • Пароль: {password}")
+    print(f"\n{Fore.GREEN}Бот будет запущен автоматически...{Style.RESET_ALL}")
+    
+    time.sleep(3)
+    return True
+
+
+# Для совместимости со старым кодом
+def contains_russian(text: str) -> bool:
+    return False
+
+def input_proxy(set_telebot_proxy: bool = False) -> str | None:
+    return None
