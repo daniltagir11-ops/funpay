@@ -211,24 +211,14 @@ def first_setup():
         return False
     
     # ========== 5. Пароль для входа ==========
-    # Генерируем случайный пароль если не указан в окружении
-    import random
-    import string
-    
-    password = os.environ.get('BOT_PASSWORD', '')
-    if not password:
-        # Генерируем случайный пароль
-        chars = string.ascii_letters + string.digits
-        password = ''.join(random.choice(chars) for _ in range(12))
-        print(f"{Fore.YELLOW}⚠ Сгенерирован случайный пароль: {password}{Style.RESET_ALL}")
-        print(f"{Fore.YELLOW}⚠ Сохраните его! Пароль можно будет сменить в боте командой /settings{Style.RESET_ALL}")
-    
-    if len(password) < 8:
-        print(f"{Fore.YELLOW}⚠ Пароль слишком короткий, дополняю...{Style.RESET_ALL}")
-        password = password + ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8 - len(password)))
-    
-    config.set("Telegram", "secretKeyHash", hash_password(password))
-    print(f"{Fore.GREEN}✓ Пароль для входа установлен{Style.RESET_ALL}")
+password = "daniltagirR_11"  # Укажите свой пароль здесь
+
+if len(password) < 8:
+    print(f"{Fore.RED}✗ Пароль слишком короткий (мин. 8 символов){Style.RESET_ALL}")
+    return False
+
+config.set("Telegram", "secretKeyHash", hash_password(password))
+print(f"{Fore.GREEN}✓ Пароль для входа установлен{Style.RESET_ALL}")
     
     # ========== 6. FunPay прокси (опционально) ==========
     funpay_proxy = os.environ.get('FUNPAY_PROXY', '')
